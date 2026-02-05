@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"strconv"
+	"sync"
+)
 
 var Handlers = map[string]func([]Value) Value{
 	"PING":    ping,
@@ -9,6 +12,16 @@ var Handlers = map[string]func([]Value) Value{
 	"HSET":    hset,
 	"HGET":    hget,
 	"HGETALL": hgetall,
+	"DEL":     del,
+	"HDEL":    hdel,
+	"EXPIRE":  expire,
+}
+
+var expirehandlers = map[string]func(string, int) error{
+	"nx": setexpirenx,
+	"xx": setexpirexx,
+	"gt": setexpiregt,
+	"lt": setexpirelt,
 }
 
 var SETs = map[string]string{}
@@ -66,7 +79,7 @@ func get(args []Value) Value {
 func hset(args []Value) Value {
 
 	if len(args) != 3 {
-		return Value{typ: "error", str: "ERRR: Wrong number of args for SET"}
+		return Value{typ: "error", str: "ERRR: Wrong number of args for HSET"}
 	}
 
 	key := args[0].bulk
@@ -138,4 +151,107 @@ func hgetall(args []Value) Value {
 	}
 
 	return Value{typ: "bulk", bulk: returnStr}
+}
+
+func del(args []Value) Value {
+	if len(args) < 1 {
+		return Value{typ: "error", str: "ERR: Wrong number of args for DEL"}
+	}
+
+	key := args[0].bulk
+
+	//Lock Set while Mutating
+	SETsMu.Lock()
+	delete(SETs, key)
+	SETsMu.Unlock()
+
+	return Value{typ: "string", str: "OK"}
+
+}
+
+func hdel(args []Value) Value {
+
+	if len(args) < 2 {
+		return Value{typ: "error", str: "ERRR: Wrong number of args for HDEL"}
+	}
+
+	key := args[0].bulk
+	key2 := args[1].bulk
+
+	HSETsMu.Lock()
+	delete(HSETs[key], key2)
+	HSETsMu.Unlock()
+
+	return Value{typ: "string", str: "OK"}
+
+}
+
+/*
+Steps for Expire:
+[x] Create data strcut for commands?
+[] Allow support for expire time on data struct
+[x] Complete Handler
+[]  Complete option heleprs
+[] Repear to clear out expired data
+[] handle AOF somehow
+
+EXPIRE key seconds [NX | XX | GT | LT]:
+
+The EXPIRE command supports a set of options:
+
+NX -- Set expiry only when the key has no expiry
+XX -- Set expiry only when the key has an existing expiry
+GT -- Set expiry only when the new expiry is greater than current one
+LT -- Set expiry only when the new expiry is less than current one
+
+How to handle data struct (ideas):
+
+ 1. a min heap with (time, key)
+    the lowest amount of time left should always be on top
+    reaper checks the top amount, if < time, delete and pop, check next val
+    and continue
+*/
+func expire(args []Value) Value {
+
+	if len(args) != 3 {
+		return Value{typ: "error", str: "ERR: Wrong number of args for EXPIRE"}
+	}
+
+	key := args[0].bulk
+	secString := args[1].bulk
+	seconds, err := strconv.Atoi(secString)
+
+	if err != nil {
+		return Value{typ: "error", str: "ERR: seconds needs to be a number"}
+	}
+
+	option := args[2].bulk
+
+	// fmt.Println(key, seconds, option)
+
+	ehandler, ok := expirehandlers[option]
+
+	if !ok {
+		return Value{typ: "error", str: "ERR: option prpovided is not a valid option."}
+	}
+
+	ehandler(key, seconds)
+
+	return Value{typ: "bulk", bulk: "Expire Time Set"}
+}
+
+func setexpirenx(key string, seconds int) error {
+	return nil
+}
+
+func setexpirexx(key string, seconds int) error {
+	return nil
+}
+
+func setexpiregt(key string, seconds int) error {
+	return nil
+}
+
+func setexpirelt(key string, seconds int) error {
+	return nil
 }

@@ -94,7 +94,7 @@ func handleConnection(conn net.Conn, aof *Aof) {
 			continue
 		}
 
-		if command == "SET" || command == "HSET" {
+		if command == "SET" || command == "HSET" || command == "DEL" || command == "HDEL" {
 			aof.Write(value)
 		}
 

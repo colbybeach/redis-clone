@@ -1,8 +1,12 @@
+package main
+
 import (
 	"strconv"
 	"sync"
-	"heap"
+	"strings"
+	"container/heap"
 	"time"
+	"errors"
 )
 
 var Handlers = map[string]func([]Value) Value{
@@ -17,7 +21,7 @@ var Handlers = map[string]func([]Value) Value{
 	"EXPIRE":  expire,
 }
 
-var expirehandlers = map[string]func(string, int) error{
+var expirehandlers = map[string]func(string, time.Time) error{
 	"nx": setexpirenx,
 	"xx": setexpirexx,
 	"gt": setexpiregt,
@@ -230,7 +234,7 @@ func expire(args []Value) Value {
 	}
 	
 	// Now calculate the absolute time
-	expirationTime := time.Now().Add(time.Duration(secInt) * time.Second)
+	seconds := time.Now().Add(time.Duration(secInt) * time.Second)
 	
 	if err != nil {
 		return Value{typ: "error", str: "ERR: seconds needs to be a number"}
@@ -238,15 +242,19 @@ func expire(args []Value) Value {
 
 	option := args[2].bulk
 
-	// fmt.Println(key, seconds, option)
+//	fmt.Println(key, seconds, option)
 
-	ehandler, ok := expirehandlers[option]
+	ehandler, ok := expirehandlers[strings.ToLower(option)]
 
 	if !ok {
-		return Value{typ: "error", str: "ERR: option prpovided is not a valid option."}
+		return Value{typ: "error", str: "ERR: option provided is not a valid option."}
 	}
 
-	ehandler(key, seconds)
+	err = ehandler(key, seconds)
+
+	if err != nil {
+		return Value{typ: "error", str: err.Error()}
+	}
 
 	return Value{typ: "bulk", bulk: "Expire Time Set"}
 
@@ -257,7 +265,9 @@ func setexpirenx(key string, seconds time.Time) error {
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
 
-	if !PQ.Exists(key) {
+	pqitem, _ := PQ.Exists(key)
+
+	if pqitem == nil {
 		heap.Push(PQ, &PQItem{Priority: seconds, Value: key})
 	} 
 	return nil
@@ -267,8 +277,10 @@ func setexpirexx(key string, seconds time.Time) error {
 	
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
-	
-	if PQ.Exists(key){	
+
+	pqitem, _ := PQ.Exists(key)
+
+	if pqitem != nil {	
 		heap.Push(PQ, &PQItem{Priority: seconds, Value: key})
 	}
 
@@ -280,18 +292,18 @@ func setexpiregt(key string, seconds time.Time) error {
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
 
-	pqitem := PQ.Exists(key)
+	pqitem, i := PQ.Exists(key)
 
 	if pqitem == nil {
 		return errors.New("Value does not have an expiration.")
 	}
 	
-  if pqitem.After(seconds) {
+  if pqitem.Priority.After(seconds) {
 		return errors.New("The expiration time is not greater than current expiration time")
   }
 
-  pq.Priority = seconds
-  heap.Fix(PQ)
+  pqitem.Priority = seconds
+  heap.Fix(PQ, i)
 
 	return nil
 }
@@ -301,18 +313,18 @@ func setexpirelt(key string, seconds time.Time) error {
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
 	
-	pqitem := PQ.Exists(key)
+	pqitem, i := PQ.Exists(key)
 
 	if pqitem == nil {
 		return errors.New("Value does not have an expiration.")
 	}
 
-	if pqitem.Before(seconds) {
+	if pqitem.Priority.Before(seconds) {
 		return errors.New("The expiration time is greater than current expiration time.")
 	}
 
-	pq.Priority = seconds
-	heap.Fix(PQ)
+	pqitem.Priority = seconds
+	heap.Fix(PQ, i)
 
 	return nil
 }

@@ -1,3 +1,5 @@
+package main
+
 import "time"
 
 
@@ -35,12 +37,12 @@ func (pq *PriorityQueue) Pop() interface{} {
 	return item
 }
 
-func (pq *PriorityQueue) Exists(v string) *PQItem{
-	for _, pqi := range pq {
+func (pq PriorityQueue) Exists(v string) (*PQItem, int) {
+	for i, pqi := range pq {
 		if pqi.Value == v {
-			return pqi
+			return pqi, i
 		}
 	}
-	return nil
+	return nil, -1
 
 }

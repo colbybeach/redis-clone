@@ -19,7 +19,7 @@ func (pq PriorityQueue) Less(i, j int) bool {
 }
 
 func (pq PriorityQueue) Swap(i, j int) {
-	pq[i], pq[j]  = pq[j], pq[i]
+	pq[i], pq[j] = pq[j], pq[i]
 }
 
 func (pq *PriorityQueue) Push(x interface{}) {
@@ -33,4 +33,14 @@ func (pq *PriorityQueue) Pop() interface{} {
 	item := old[n-1]
 	*pq = old[0: n-1]
 	return item
+}
+
+func (pq *PriorityQueue) Exists(v string) *PQItem{
+	for _, pqi := range pq {
+		if pqi.Value == v {
+			return pqi
+		}
+	}
+	return nil
+
 }

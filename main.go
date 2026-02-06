@@ -8,6 +8,10 @@ import (
 
 func main() {
 
+	HEAPMu.Lock()
+ 	heap.Init(PQ) 
+  HEAPMu.Unlock()
+
 	fmt.Println("Listening on port :6379")
 	//Creating a passive socket
 	//Colon means to listen on all available network interfaces like localhost, private ip, etc.

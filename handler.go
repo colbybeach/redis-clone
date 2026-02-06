@@ -1,5 +1,3 @@
-package main
-
 import (
 	"strconv"
 	"sync"
@@ -35,7 +33,6 @@ var HSETs = map[string]map[string]string{}
 var HSETsMu = sync.RWMutex{}
 
 var PQ = &PriorityQueue{}
-heap.Init(pq)
 var HEAPMu = sync.RWMutex{}
 
 
@@ -196,9 +193,9 @@ func hdel(args []Value) Value {
 /*
 Steps for Expire:
 [x] Create data strcut for commands?
-[] Allow support for expire time on data struct
+[x] Allow support for expire time on data struct
 [x] Complete Handler
-[]  Complete option heleprs
+[x]  Complete option heleprs
 [] Repear to clear out expired data
 [] handle AOF somehow
 
@@ -226,9 +223,15 @@ func expire(args []Value) Value {
 
 	key := args[0].bulk
 	secString := args[1].bulk
-	seconds, err := time.Now().Add(time.Duration(strconv.Atoi(secString)) * time.Second)
 
-
+  secInt, err := strconv.Atoi(secString)
+  if err != nil {
+  	return Value{typ: "error", str: "ERR: seconds needs to be a number"}
+	}
+	
+	// Now calculate the absolute time
+	expirationTime := time.Now().Add(time.Duration(secInt) * time.Second)
+	
 	if err != nil {
 		return Value{typ: "error", str: "ERR: seconds needs to be a number"}
 	}
@@ -246,6 +249,7 @@ func expire(args []Value) Value {
 	ehandler(key, seconds)
 
 	return Value{typ: "bulk", bulk: "Expire Time Set"}
+
 }
 
 func setexpirenx(key string, seconds time.Time) error {
@@ -254,7 +258,7 @@ func setexpirenx(key string, seconds time.Time) error {
 	defer HEAPMu.Unlock()
 
 	if !PQ.Exists(key) {
-		heap.Push(pq, {seconds, key})
+		heap.Push(PQ, &PQItem{Priority: seconds, Value: key})
 	} 
 	return nil
 }
@@ -264,29 +268,30 @@ func setexpirexx(key string, seconds time.Time) error {
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
 	
-	if PQ.Exists(key){
-			heap.Push(pq, {seconds, key})
+	if PQ.Exists(key){	
+		heap.Push(PQ, &PQItem{Priority: seconds, Value: key})
 	}
+
 	return nil
 }
 
 func setexpiregt(key string, seconds time.Time) error {
-	pqitem := PQ.Exists(key)
-
 
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
+
+	pqitem := PQ.Exists(key)
 
 	if pqitem == nil {
 		return errors.New("Value does not have an expiration.")
 	}
 	
-  if !pqitem.Before(seconds) {
+  if pqitem.After(seconds) {
 		return errors.New("The expiration time is not greater than current expiration time")
   }
 
   pq.Priority = seconds
-  heap.Fix(pq)
+  heap.Fix(PQ)
 
 	return nil
 }
@@ -295,7 +300,6 @@ func setexpirelt(key string, seconds time.Time) error {
 	
 	HEAPMu.Lock()
 	defer HEAPMu.Unlock()
-
 	
 	pqitem := PQ.Exists(key)
 
@@ -308,7 +312,7 @@ func setexpirelt(key string, seconds time.Time) error {
 	}
 
 	pq.Priority = seconds
-	heap.Fix(pq)
+	heap.Fix(PQ)
 
 	return nil
 }
